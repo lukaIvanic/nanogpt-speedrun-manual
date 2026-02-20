@@ -3,11 +3,12 @@
 import re
 import glob
 import os
+import argparse
 import matplotlib.pyplot as plt
 
 
 def parse_log(path):
-    train_steps, train_losses = [], []
+    train_steps, train_losses, train_lrs = [], [], []
     val_steps, val_losses, val_times_s = [], [], []
 
     started = False
@@ -28,39 +29,90 @@ def parse_log(path):
                 continue
 
             # Train line: step:N/M, train_time:Xms, step_avg:Yms, train loss:Z,  lr:W
-            m = re.match(r"step:(\d+)/\d+,.* train loss:([\d.]+)", line)
+            m = re.match(r"step:(\d+)/\d+,.* train loss:([\d.]+),\s+lr:([\d.]+)", line)
             if m:
                 train_steps.append(int(m.group(1)))
                 train_losses.append(float(m.group(2)))
+                train_lrs.append(float(m.group(3)))
+                continue
 
-    return train_steps, train_losses, val_steps, val_losses, val_times_s
+            # Train line without train loss: step:N/M, train_time:Xms, step_avg:Yms, lr:W
+            m = re.match(r"step:(\d+)/\d+,.*lr:([\d.]+)", line)
+            if m:
+                train_steps.append(int(m.group(1)))
+                train_losses.append(None)
+                train_lrs.append(float(m.group(2)))
+
+    # Filter out None losses
+    filtered_steps = [s for s, l in zip(train_steps, train_losses) if l is not None]
+    filtered_losses = [l for l in train_losses if l is not None]
+
+    return filtered_steps, filtered_losses, train_lrs, [s for s in train_steps], val_steps, val_losses, val_times_s
 
 
-def plot_run(run_id, train_steps, train_losses, val_steps, val_losses, val_times_s, out_path):
-    fig, axes = plt.subplots(3, 1, figsize=(10, 12))
-    fig.suptitle(run_id[:30], fontsize=14)
+def filter_by(keys, *arrays, min_val=0):
+    """Filter parallel arrays to only include entries where key >= min_val."""
+    indices = [i for i, k in enumerate(keys) if k >= min_val]
+    return tuple([[keys[i] for i in indices]] + [[a[i] for i in indices] for a in arrays])
 
-    axes[0].plot(train_steps, train_losses, linewidth=0.8, label="train loss")
-    axes[0].set_xlabel("Step")
-    axes[0].set_ylabel("Train Loss")
-    axes[0].set_title("Train Loss vs Step")
-    axes[0].legend(fontsize=8)
+
+def annotate_final(ax, xs, ys, color=None):
+    """Add a dashed horizontal line and text at the final data point."""
+    if not xs:
+        return
+    ax.axhline(y=ys[-1], linestyle="--", linewidth=0.8, alpha=0.5, color=color)
+    ax.annotate(f"{ys[-1]:.4f}", xy=(xs[-1], ys[-1]), fontsize=9,
+                xytext=(5, 5), textcoords="offset points", color=color)
+
+
+def apply_log_x(axes, log_x):
+    if log_x:
+        for ax in axes:
+            ax.set_xscale("log")
+
+
+def plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s, out_path, log_x, min_step, min_time):
+    # Filter data
+    f_train_steps, f_train_losses = filter_by(train_steps, train_losses, min_val=min_step)
+    f_lr_steps, f_train_lrs = filter_by(lr_steps, train_lrs, min_val=min_step)
+    f_val_steps, f_val_losses = filter_by(val_steps, val_losses, min_val=min_step)
+    f_val_times, f_val_losses_t = filter_by(val_times_s, val_losses, min_val=min_time)
+
+    fig, axes = plt.subplots(4, 1, figsize=(10, 16))
+    fig.suptitle(run_id[:30], fontsize=17)
+
+    axes[0].plot(f_train_steps, f_train_losses, linewidth=1.2, label="train loss")
+    annotate_final(axes[0], f_train_steps, f_train_losses)
+    axes[0].set_xlabel("Step", fontsize=12)
+    axes[0].set_ylabel("Train Loss", fontsize=12)
+    axes[0].set_title("Train Loss vs Step", fontsize=13)
+    axes[0].legend(fontsize=11)
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].plot(val_steps, val_losses, marker="o", markersize=3, label="val loss")
-    axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("Val Loss")
-    axes[1].set_title("Val Loss vs Step")
-    axes[1].legend(fontsize=8)
+    axes[1].plot(f_val_steps, f_val_losses, marker="o", markersize=4, linewidth=1.2, label="val loss")
+    annotate_final(axes[1], f_val_steps, f_val_losses)
+    axes[1].set_xlabel("Step", fontsize=12)
+    axes[1].set_ylabel("Val Loss", fontsize=12)
+    axes[1].set_title("Val Loss vs Step", fontsize=13)
+    axes[1].legend(fontsize=11)
     axes[1].grid(True, alpha=0.3)
 
-    axes[2].plot(val_times_s, val_losses, marker="o", markersize=3, label="val loss")
-    axes[2].set_xlabel("Train Time (s)")
-    axes[2].set_ylabel("Val Loss")
-    axes[2].set_title("Val Loss vs Time")
-    axes[2].legend(fontsize=8)
+    axes[2].plot(f_lr_steps, f_train_lrs, linewidth=1.2, label="lr")
+    axes[2].set_xlabel("Step", fontsize=12)
+    axes[2].set_ylabel("Learning Rate", fontsize=12)
+    axes[2].set_title("Learning Rate vs Step", fontsize=13)
+    axes[2].legend(fontsize=11)
     axes[2].grid(True, alpha=0.3)
 
+    axes[3].plot(f_val_times, f_val_losses_t, marker="o", markersize=4, linewidth=1.2, label="val loss")
+    annotate_final(axes[3], f_val_times, f_val_losses_t)
+    axes[3].set_xlabel("Train Time (s)", fontsize=12)
+    axes[3].set_ylabel("Val Loss", fontsize=12)
+    axes[3].set_title("Val Loss vs Time", fontsize=13)
+    axes[3].legend(fontsize=11)
+    axes[3].grid(True, alpha=0.3)
+
+    apply_log_x(axes, log_x)
     plt.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
@@ -68,56 +120,79 @@ def plot_run(run_id, train_steps, train_losses, val_steps, val_losses, val_times
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Plot training logs")
+    parser.add_argument("--log-x", action="store_true", help="Use log scale for x axes")
+    parser.add_argument("--min-step", type=int, default=0, help="Start plotting from this step (for train/val vs step charts)")
+    parser.add_argument("--min-time", type=float, default=0, help="Start plotting from this time in seconds (for val vs time chart)")
+    opts = parser.parse_args()
+
     logs_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
     txt_files = sorted(glob.glob(os.path.join(logs_dir, "*.txt")))
 
     all_runs = []
     for path in txt_files:
         run_id = os.path.splitext(os.path.basename(path))[0]
-        train_steps, train_losses, val_steps, val_losses, val_times_s = parse_log(path)
+        train_steps, train_losses, train_lrs, lr_steps, val_steps, val_losses, val_times_s = parse_log(path)
 
         if not val_steps and not train_steps:
             continue
 
-        all_runs.append((run_id, train_steps, train_losses, val_steps, val_losses, val_times_s))
+        all_runs.append((run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s))
 
         out_path = os.path.join(logs_dir, f"{run_id}.png")
-        plot_run(run_id, train_steps, train_losses, val_steps, val_losses, val_times_s, out_path)
+        plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s, out_path, opts.log_x, opts.min_step, opts.min_time)
 
     # Combined plot
     if not all_runs:
         print("No runs with training data found.")
         return
 
-    fig, axes = plt.subplots(3, 1, figsize=(12, 14))
-    fig.suptitle("All Runs", fontsize=14)
+    fig, axes = plt.subplots(4, 1, figsize=(12, 18))
+    fig.suptitle("All Runs", fontsize=17)
 
-    for run_id, train_steps, train_losses, val_steps, val_losses, val_times_s in all_runs:
+    for run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s in all_runs:
         label = run_id[:30]
-        if train_steps:
-            axes[0].plot(train_steps, train_losses, linewidth=0.8, label=label)
-        if val_steps:
-            axes[1].plot(val_steps, val_losses, marker="o", markersize=3, label=label)
-            axes[2].plot(val_times_s, val_losses, marker="o", markersize=3, label=label)
+        f_train_steps, f_train_losses = filter_by(train_steps, train_losses, min_val=opts.min_step)
+        f_lr_steps, f_train_lrs = filter_by(lr_steps, train_lrs, min_val=opts.min_step)
+        f_val_steps, f_val_losses = filter_by(val_steps, val_losses, min_val=opts.min_step)
+        f_val_times, f_val_losses_t = filter_by(val_times_s, val_losses, min_val=opts.min_time)
+        if f_train_steps:
+            line, = axes[0].plot(f_train_steps, f_train_losses, linewidth=1.2, label=label)
+            annotate_final(axes[0], f_train_steps, f_train_losses, color=line.get_color())
+        if f_val_steps:
+            line, = axes[1].plot(f_val_steps, f_val_losses, marker="o", markersize=4, linewidth=1.2, label=label)
+            annotate_final(axes[1], f_val_steps, f_val_losses, color=line.get_color())
+        if f_val_times:
+            line, = axes[3].plot(f_val_times, f_val_losses_t, marker="o", markersize=4, linewidth=1.2, label=label)
+            annotate_final(axes[3], f_val_times, f_val_losses_t, color=line.get_color())
+        if f_train_lrs:
+            axes[2].plot(f_lr_steps, f_train_lrs, linewidth=1.2, label=label)
 
-    axes[0].set_xlabel("Step")
-    axes[0].set_ylabel("Train Loss")
-    axes[0].set_title("Train Loss vs Step")
-    axes[0].legend(fontsize=8)
+    axes[0].set_xlabel("Step", fontsize=12)
+    axes[0].set_ylabel("Train Loss", fontsize=12)
+    axes[0].set_title("Train Loss vs Step", fontsize=13)
+    axes[0].legend(fontsize=11)
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("Val Loss")
-    axes[1].set_title("Val Loss vs Step")
-    axes[1].legend(fontsize=8)
+    axes[1].set_xlabel("Step", fontsize=12)
+    axes[1].set_ylabel("Val Loss", fontsize=12)
+    axes[1].set_title("Val Loss vs Step", fontsize=13)
+    axes[1].legend(fontsize=11)
     axes[1].grid(True, alpha=0.3)
 
-    axes[2].set_xlabel("Train Time (s)")
-    axes[2].set_ylabel("Val Loss")
-    axes[2].set_title("Val Loss vs Time")
-    axes[2].legend(fontsize=8)
+    axes[2].set_xlabel("Step", fontsize=12)
+    axes[2].set_ylabel("Learning Rate", fontsize=12)
+    axes[2].set_title("Learning Rate vs Step", fontsize=13)
+    axes[2].legend(fontsize=11)
     axes[2].grid(True, alpha=0.3)
 
+    axes[3].set_xlabel("Train Time (s)", fontsize=12)
+    axes[3].set_ylabel("Val Loss", fontsize=12)
+    axes[3].set_title("Val Loss vs Time", fontsize=13)
+    axes[3].legend(fontsize=11)
+    axes[3].grid(True, alpha=0.3)
+
+    apply_log_x(axes, opts.log_x)
     plt.tight_layout()
     out_path = os.path.join(logs_dir, "all_runs.png")
     fig.savefig(out_path, dpi=150)
