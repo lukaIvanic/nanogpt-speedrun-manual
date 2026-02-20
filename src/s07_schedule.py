@@ -21,7 +21,7 @@ class Hyperparameters:
     val_batch_size: int = 4 * 64 * 1024 * 8
     # schedule
     num_scheduled_iterations: int = 1020  # number of steps to complete lr and ws schedule
-    num_extension_iterations: int = 520  # number of steps to continue training at final lr and ws
+    num_extension_iterations: int = 510  # number of steps to continue training at final lr and ws
     # evaluation and logging
     run_id: str = f"{uuid.uuid4()}"
     val_loss_every: int = 50  # every how many steps to evaluate val loss? 0 for only at the end
@@ -40,6 +40,7 @@ class TrainingStage:
     mtp_weights_end: list[float]
     train_max_seq_len: int
     duration: float = None
+    lr_floor: float = 0.15
 
 class TrainingSchedule:
     """
@@ -71,6 +72,15 @@ class TrainingSchedule:
         # Split embed at specified stage (ensure odd step for Adam)
         self.split_step = self.boundaries[split_embed_stage][0] | 1
 
+        # Precompute stage 3 start LR (using original cooldown formula)
+        s3_start = self.boundaries[2][0]
+        lr = self.stages[2].lr_mul
+        cd_start = int(scheduled_iterations * (1 - cooldown_frac))
+        if s3_start >= cd_start:
+            t = min(1.0, (s3_start - cd_start) / (scheduled_iterations - cd_start))
+            lr = lr * (1 - t) + 0.15 * t
+        self._stage3_start_lr = lr
+
         # Precompute MTP weights for all steps
         self.mtp_weights = []
         for step in range(self.total_steps + 1):
@@ -87,8 +97,19 @@ class TrainingSchedule:
         return self.stages[-1], 1.0
 
     def get_lr(self, step: int) -> float:
-        # learning rate schedule: tied to batch size schedule, with cooldown at the end
         stage, _ = self.lookup(step)
+
+        # Stage 3: linear from original start LR to lr_floor
+        s3_start, s3_end = self.boundaries[2]
+        if s3_start <= step < s3_end:
+            t = (step - s3_start) / (s3_end - s3_start)
+            return self._stage3_start_lr * (1 - t) + stage.lr_floor * t
+
+        # Extension: flat at floor
+        if step >= s3_end:
+            return self.stages[-1].lr_floor
+
+        # Stages 0 & 1: original cooldown behavior
         lr = stage.lr_mul
         cd_start = int(self.scheduled_iterations * (1 - self.cooldown_frac))
         if step >= cd_start:
@@ -102,7 +123,7 @@ TRAINING_STAGES = [
                   mtp_weights_start=[1.0, 0.5, 0.25], mtp_weights_end=[1.0, 0.5, 0.0]),
     TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=16 * 2048 * 8, window_sizes=(3, 7), lr_mul=1.52,  # (16/8)**0.6
                   mtp_weights_start=[1.0, 0.5], mtp_weights_end=[1.0, 0.0]),
-    TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73,  # (24/8)**0.5
+    TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73, lr_floor=0.30,  # (24/8)**0.5
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
     # extension stage
     TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=1.0,  # lr_mul is not used

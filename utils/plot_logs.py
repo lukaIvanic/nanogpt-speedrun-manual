@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 def parse_log(path):
-    train_steps, train_losses, train_lrs = [], [], []
+    train_steps, train_losses, train_lrs, train_times_s = [], [], [], []
     val_steps, val_losses, val_times_s = [], [], []
 
     started = False
@@ -29,25 +29,27 @@ def parse_log(path):
                 continue
 
             # Train line: step:N/M, train_time:Xms, step_avg:Yms, train loss:Z,  lr:W
-            m = re.match(r"step:(\d+)/\d+,.* train loss:([\d.]+),\s+lr:([\d.]+)", line)
+            m = re.match(r"step:(\d+)/\d+, train_time:(\d+)ms,.* train loss:([\d.]+),\s+lr:([\d.]+)", line)
             if m:
                 train_steps.append(int(m.group(1)))
-                train_losses.append(float(m.group(2)))
-                train_lrs.append(float(m.group(3)))
+                train_times_s.append(int(m.group(2)) / 1000)
+                train_losses.append(float(m.group(3)))
+                train_lrs.append(float(m.group(4)))
                 continue
 
             # Train line without train loss: step:N/M, train_time:Xms, step_avg:Yms, lr:W
-            m = re.match(r"step:(\d+)/\d+,.*lr:([\d.]+)", line)
+            m = re.match(r"step:(\d+)/\d+, train_time:(\d+)ms,.*lr:([\d.]+)", line)
             if m:
                 train_steps.append(int(m.group(1)))
+                train_times_s.append(int(m.group(2)) / 1000)
                 train_losses.append(None)
-                train_lrs.append(float(m.group(2)))
+                train_lrs.append(float(m.group(3)))
 
     # Filter out None losses
     filtered_steps = [s for s, l in zip(train_steps, train_losses) if l is not None]
     filtered_losses = [l for l in train_losses if l is not None]
 
-    return filtered_steps, filtered_losses, train_lrs, [s for s in train_steps], val_steps, val_losses, val_times_s
+    return filtered_steps, filtered_losses, train_lrs, list(train_steps), train_times_s, val_steps, val_losses, val_times_s
 
 
 def filter_by(keys, *arrays, min_val=0):
@@ -71,14 +73,15 @@ def apply_log_x(axes, log_x):
             ax.set_xscale("log")
 
 
-def plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s, out_path, log_x, min_step, min_time):
+def plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, train_times_s, val_steps, val_losses, val_times_s, out_path, log_x, min_step, min_time):
     # Filter data
     f_train_steps, f_train_losses = filter_by(train_steps, train_losses, min_val=min_step)
     f_lr_steps, f_train_lrs = filter_by(lr_steps, train_lrs, min_val=min_step)
     f_val_steps, f_val_losses = filter_by(val_steps, val_losses, min_val=min_step)
     f_val_times, f_val_losses_t = filter_by(val_times_s, val_losses, min_val=min_time)
+    f_lr_times, f_lr_times_lrs = filter_by(train_times_s, train_lrs, min_val=min_time)
 
-    fig, axes = plt.subplots(4, 1, figsize=(10, 16))
+    fig, axes = plt.subplots(5, 1, figsize=(10, 20))
     fig.suptitle(run_id[:30], fontsize=17)
 
     axes[0].plot(f_train_steps, f_train_losses, linewidth=1.2, label="train loss")
@@ -112,6 +115,13 @@ def plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, 
     axes[3].legend(fontsize=11)
     axes[3].grid(True, alpha=0.3)
 
+    axes[4].plot(f_lr_times, f_lr_times_lrs, linewidth=1.2, label="lr")
+    axes[4].set_xlabel("Train Time (s)", fontsize=12)
+    axes[4].set_ylabel("Learning Rate", fontsize=12)
+    axes[4].set_title("Learning Rate vs Time", fontsize=13)
+    axes[4].legend(fontsize=11)
+    axes[4].grid(True, alpha=0.3)
+
     apply_log_x(axes, log_x)
     plt.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -132,41 +142,44 @@ def main():
     all_runs = []
     for path in txt_files:
         run_id = os.path.splitext(os.path.basename(path))[0]
-        train_steps, train_losses, train_lrs, lr_steps, val_steps, val_losses, val_times_s = parse_log(path)
+        train_steps, train_losses, train_lrs, lr_steps, train_times_s, val_steps, val_losses, val_times_s = parse_log(path)
 
         if not val_steps and not train_steps:
             continue
 
-        all_runs.append((run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s))
+        all_runs.append((run_id, train_steps, train_losses, lr_steps, train_lrs, train_times_s, val_steps, val_losses, val_times_s))
 
         out_path = os.path.join(logs_dir, f"{run_id}.png")
-        plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s, out_path, opts.log_x, opts.min_step, opts.min_time)
+        plot_run(run_id, train_steps, train_losses, lr_steps, train_lrs, train_times_s, val_steps, val_losses, val_times_s, out_path, opts.log_x, opts.min_step, opts.min_time)
 
     # Combined plot
     if not all_runs:
         print("No runs with training data found.")
         return
 
-    fig, axes = plt.subplots(4, 1, figsize=(12, 18))
+    fig, axes = plt.subplots(5, 1, figsize=(12, 22))
     fig.suptitle("All Runs", fontsize=17)
 
-    for run_id, train_steps, train_losses, lr_steps, train_lrs, val_steps, val_losses, val_times_s in all_runs:
+    for run_id, train_steps, train_losses, lr_steps, train_lrs, train_times_s, val_steps, val_losses, val_times_s in all_runs:
         label = run_id[:30]
         f_train_steps, f_train_losses = filter_by(train_steps, train_losses, min_val=opts.min_step)
         f_lr_steps, f_train_lrs = filter_by(lr_steps, train_lrs, min_val=opts.min_step)
         f_val_steps, f_val_losses = filter_by(val_steps, val_losses, min_val=opts.min_step)
         f_val_times, f_val_losses_t = filter_by(val_times_s, val_losses, min_val=opts.min_time)
+        f_lr_times, f_lr_times_lrs = filter_by(train_times_s, train_lrs, min_val=opts.min_time)
         if f_train_steps:
             line, = axes[0].plot(f_train_steps, f_train_losses, linewidth=1.2, label=label)
             annotate_final(axes[0], f_train_steps, f_train_losses, color=line.get_color())
         if f_val_steps:
             line, = axes[1].plot(f_val_steps, f_val_losses, marker="o", markersize=4, linewidth=1.2, label=label)
             annotate_final(axes[1], f_val_steps, f_val_losses, color=line.get_color())
+        if f_train_lrs:
+            axes[2].plot(f_lr_steps, f_train_lrs, linewidth=1.2, label=label)
         if f_val_times:
             line, = axes[3].plot(f_val_times, f_val_losses_t, marker="o", markersize=4, linewidth=1.2, label=label)
             annotate_final(axes[3], f_val_times, f_val_losses_t, color=line.get_color())
-        if f_train_lrs:
-            axes[2].plot(f_lr_steps, f_train_lrs, linewidth=1.2, label=label)
+        if f_lr_times:
+            axes[4].plot(f_lr_times, f_lr_times_lrs, linewidth=1.2, label=label)
 
     axes[0].set_xlabel("Step", fontsize=12)
     axes[0].set_ylabel("Train Loss", fontsize=12)
@@ -191,6 +204,12 @@ def main():
     axes[3].set_title("Val Loss vs Time", fontsize=13)
     axes[3].legend(fontsize=11)
     axes[3].grid(True, alpha=0.3)
+
+    axes[4].set_xlabel("Train Time (s)", fontsize=12)
+    axes[4].set_ylabel("Learning Rate", fontsize=12)
+    axes[4].set_title("Learning Rate vs Time", fontsize=13)
+    axes[4].legend(fontsize=11)
+    axes[4].grid(True, alpha=0.3)
 
     apply_log_x(axes, opts.log_x)
     plt.tight_layout()
