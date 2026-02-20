@@ -476,4 +476,4 @@ class GPT(nn.Module):
             logits = 23 * torch.sigmoid((logits + 5) / 7.5)
             logits_for_loss = logits.float()
             loss = F.cross_entropy(logits_for_loss.view(-1, logits_for_loss.size(-1)), target_seq, reduction="mean")
-        return loss
+        return loss, losses.numel()

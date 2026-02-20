@@ -145,9 +145,9 @@ def train_step(model, training_manager, train_loader, step):
     for idx in range(grad_accum_steps):
         inputs, targets, cum_seqlens, bigram_inputs, bigram_cpu = train_loader.send(training_manager.train_loader_send_args)
         training_manager.sparse_index_update(step, bigram_cpu)
-        loss = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()) * grad_scale
+        loss, tokens_numel = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()) * grad_scale
         training_manager.sparse_index_share(step)
-        train_loss += loss.item() / targets.numel()
+        train_loss += loss.item() / tokens_numel
         loss.backward()
         del loss
     training_manager.step_optimizers(step)
