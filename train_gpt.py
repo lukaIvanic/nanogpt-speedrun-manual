@@ -132,7 +132,7 @@ def validate(model, training_manager, val_max_seq_len):
     with torch.no_grad():
         for _ in range(val_steps):
             inputs, targets, cum_seqlens, bigram_inputs, _ = next(val_loader)
-            val_loss_b, _ += model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args(), val_max_seq_len=val_max_seq_len)
+            val_loss_b, _ = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args(), val_max_seq_len=val_max_seq_len)
             val_loss += val_loss_b
     val_loss /= val_steps
     del val_loader
