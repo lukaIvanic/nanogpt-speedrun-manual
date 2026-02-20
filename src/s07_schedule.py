@@ -24,8 +24,8 @@ class Hyperparameters:
     num_extension_iterations: int = 40  # number of steps to continue training at final lr and ws
     # evaluation and logging
     run_id: str = f"{uuid.uuid4()}"
-    val_loss_every: int = 250  # every how many steps to evaluate val loss? 0 for only at the end
-    save_checkpoint: bool = False
+    val_loss_every: int = 50  # every how many steps to evaluate val loss? 0 for only at the end
+    save_checkpoint: bool = True
     # bigram hash embedding
     bigram_vocab_size: int = 50304 * 5
 
