@@ -109,7 +109,8 @@ def warmup(model, training_manager: TrainingManager, val_max_seq_len):
             send_args = training_manager.train_loader_send_args
             inputs, targets, cum_seqlens, bigram_inputs, bigram_cpu = train_loader.send(send_args)
             training_manager.sparse_index_update(step, bigram_cpu)
-            loss, _ = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()) * grad_scale
+            loss, _ = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args())
+            loss *= grad_scale
             training_manager.sparse_index_share(step)
             loss.backward()
             del loss
