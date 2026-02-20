@@ -109,7 +109,7 @@ def warmup(model, training_manager: TrainingManager, val_max_seq_len):
             send_args = training_manager.train_loader_send_args
             inputs, targets, cum_seqlens, bigram_inputs, bigram_cpu = train_loader.send(send_args)
             training_manager.sparse_index_update(step, bigram_cpu)
-            loss = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()) * grad_scale
+            loss, _ = model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args()) * grad_scale
             training_manager.sparse_index_share(step)
             loss.backward()
             del loss
@@ -132,7 +132,7 @@ def validate(model, training_manager, val_max_seq_len):
     with torch.no_grad():
         for _ in range(val_steps):
             inputs, targets, cum_seqlens, bigram_inputs, _ = next(val_loader)
-            val_loss += model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args(), val_max_seq_len=val_max_seq_len)
+            val_loss, _ += model(inputs, targets, cum_seqlens, bigram_inputs, training_manager.get_forward_args(), val_max_seq_len=val_max_seq_len)
     val_loss /= val_steps
     del val_loader
     dist.reduce(val_loss, 0, op=dist.ReduceOp.AVG)
