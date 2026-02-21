@@ -20,8 +20,8 @@ class Hyperparameters:
     # batch sizes
     val_batch_size: int = 4 * 64 * 1024 * 8
     # schedule
-    num_scheduled_iterations: int = 1244  # number of steps to complete lr and ws schedule
-    num_extension_iterations: int = 300  # number of steps to continue training at final lr and ws
+    num_scheduled_iterations: int = 450  # number of steps to complete lr and ws schedule
+    num_extension_iterations: int = 40  # number of steps to continue training at final lr and ws
     # evaluation and logging
     run_id: str = f"{uuid.uuid4()}"
     val_loss_every: int = 50  # every how many steps to evaluate val loss? 0 for only at the end
@@ -78,7 +78,7 @@ class TrainingSchedule:
         cd_start = int(scheduled_iterations * (1 - cooldown_frac))
         if s3_start >= cd_start:
             t = min(1.0, (s3_start - cd_start) / (scheduled_iterations - cd_start))
-            lr = lr * (1 - t) + 0.15 * t
+            lr = lr * (1 - t) + self.stages[1].lr_floor * t
         self._stage3_start_lr = lr
 
         # Precompute MTP weights for all steps
@@ -116,23 +116,23 @@ class TrainingSchedule:
         cd_start = int(self.scheduled_iterations * (1 - self.cooldown_frac))
         if step >= cd_start:
             t = min(1.0, (step - cd_start) / (self.scheduled_iterations - cd_start))
-            lr = lr * (1 - t) + 0.15 * t
+            lr = lr * (1 - t) + stage.lr_floor * t
         return lr
 
 # window_sizes are in units of `block_size` tokens (defined in TrainingManager)
 TRAINING_STAGES = [
-    TrainingStage(duration=0.200965, train_max_seq_len=896, batch_size=8 * 2048 * 8, window_sizes=(1, 3), lr_mul=1.0,
+    TrainingStage(duration=1/3, train_max_seq_len=896, batch_size=8 * 2048 * 8, window_sizes=(1, 3), lr_mul=1.0,
                   mtp_weights_start=[1.0, 0.5, 0.25], mtp_weights_end=[1.0, 0.5, 0.0]),
-    TrainingStage(duration=0.399518, train_max_seq_len=2048, batch_size=16 * 2048 * 8, window_sizes=(3, 7), lr_mul=1.52,  # (16/8)**0.6
+    TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=16 * 2048 * 8, window_sizes=(3, 7), lr_mul=1.52,  # (16/8)**0.6
                   mtp_weights_start=[1.0, 0.5], mtp_weights_end=[1.0, 0.0]),
-    TrainingStage(duration=0.399518, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73, lr_floor=0.15,  # (24/8)**0.5
+    TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73, lr_floor=0.15,  # (24/8)**0.5
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
     # extension stage
     TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=0.15, lr_floor=0.15,
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
 ]
 
-training_schedule = TrainingSchedule(TRAINING_STAGES, args.num_scheduled_iterations, args.num_extension_iterations, cooldown_frac=0.65)
+training_schedule = TrainingSchedule(TRAINING_STAGES, args.num_scheduled_iterations, args.num_extension_iterations, cooldown_frac=0.55)
 
 def get_muon_momentum(step: int, muon_warmup_steps=300, muon_cooldown_steps=50, momentum_min=0.85, momentum_max=0.95):
     # warmup phase: linearly increase momentum from min to max

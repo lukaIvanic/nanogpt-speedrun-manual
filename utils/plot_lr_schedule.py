@@ -39,7 +39,7 @@ SCHEDULED_ITERATIONS, durations = compute_schedule_from_steps(STAGE_STEPS)
 # Mirror the stages from s07_schedule.py
 STAGES = [
     Stage(duration=durations[0], lr_mul=1.0, lr_floor=0.15),
-    Stage(duration=durations[1], lr_mul=1.52, lr_floor=0.15),
+    Stage(duration=durations[1], lr_mul=1.52, lr_floor=-0.8),
     Stage(duration=durations[2], lr_mul=1.73, lr_floor=0.15),
     Stage(duration=None, lr_mul=0.15, lr_floor=0.15),  # extension
 ]
@@ -65,12 +65,17 @@ def get_lr_original(step):
     cd_start = int(SCHEDULED_ITERATIONS * (1 - COOLDOWN_FRAC))
     if step >= cd_start:
         t = min(1.0, (step - cd_start) / (SCHEDULED_ITERATIONS - cd_start))
-        lr = lr * (1 - t) + 0.15 * t
+        lr = lr * (1 - t) + stage.lr_floor * t
     return lr
 
 
-# Precompute the LR at the start of stage 3 (using original schedule)
-STAGE3_START_LR = get_lr_original(boundaries[2][0])
+# Precompute the LR at the start of stage 3 (using original schedule with stage 1's floor)
+s3_start = boundaries[2][0]
+cd_start = int(SCHEDULED_ITERATIONS * (1 - COOLDOWN_FRAC))
+STAGE3_START_LR = STAGES[2].lr_mul
+if s3_start >= cd_start:
+    t = min(1.0, (s3_start - cd_start) / (SCHEDULED_ITERATIONS - cd_start))
+    STAGE3_START_LR = STAGES[2].lr_mul * (1 - t) + STAGES[1].lr_floor * t
 # And the LR at the start of extension (end of stage 3 with new floor)
 STAGE3_END_LR = STAGES[2].lr_floor  # 0.30
 
