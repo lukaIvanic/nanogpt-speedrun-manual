@@ -128,7 +128,7 @@ TRAINING_STAGES = [
     TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73, lr_floor=0.30,  # (24/8)**0.5
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
     # extension stage
-    TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=0.6, lr_floor=0.12,
+    TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=0.3, lr_floor=0.01,
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
 ]
 

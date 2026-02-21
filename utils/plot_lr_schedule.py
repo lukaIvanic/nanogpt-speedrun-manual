@@ -17,7 +17,7 @@ STAGES = [
     Stage(duration=1/3, lr_mul=1.0, lr_floor=0.15),
     Stage(duration=1/3, lr_mul=1.52, lr_floor=0.15),
     Stage(duration=1/3, lr_mul=1.73, lr_floor=0.30),
-    Stage(duration=None, lr_mul=0.6, lr_floor=0.12),  # extension
+    Stage(duration=None, lr_mul=0.3, lr_floor=0.01),  # extension
 ]
 
 SCHEDULED_ITERATIONS = 1020

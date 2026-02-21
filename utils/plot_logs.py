@@ -20,30 +20,33 @@ def parse_log(path):
             if not started:
                 continue
 
-            # Val line: step:N/M val_loss:V train_time:Xms step_avg:Yms
-            m = re.match(r"step:(\d+)/\d+ val_loss:([\d.]+) train_time:([\d.]+)ms", line)
+            # Val line: step:N/M val_loss:V train_time:X(ms| secs) step_avg:Yms
+            m = re.match(r"step:(\d+)/\d+ val_loss:([\d.]+) train_time:([\d.]+)\s*(ms|secs?)", line)
             if m:
                 val_steps.append(int(m.group(1)))
                 val_losses.append(float(m.group(2)))
-                val_times_s.append(float(m.group(3)) / 1000)
+                t = float(m.group(3))
+                val_times_s.append(t if m.group(4).startswith("sec") else t / 1000)
                 continue
 
-            # Train line: step:N/M, train_time:Xms, step_avg:Yms, train loss:Z,  lr:W
-            m = re.match(r"step:(\d+)/\d+, train_time:([\d.]+)ms,.* train loss:([\d.]+),\s+lr:([\d.]+)", line)
+            # Train line: step:N/M, train_time:X(ms| secs), step_avg:Yms, train loss:Z,  lr:W
+            m = re.match(r"step:(\d+)/\d+, train_time:([\d.]+)\s*(ms|secs?),.* train loss:([\d.]+),\s+lr:([\d.]+)", line)
             if m:
                 train_steps.append(int(m.group(1)))
-                train_times_s.append(float(m.group(2)) / 1000)
-                train_losses.append(float(m.group(3)))
-                train_lrs.append(float(m.group(4)))
+                t = float(m.group(2))
+                train_times_s.append(t if m.group(3).startswith("sec") else t / 1000)
+                train_losses.append(float(m.group(4)))
+                train_lrs.append(float(m.group(5)))
                 continue
 
-            # Train line without train loss: step:N/M, train_time:Xms, step_avg:Yms, lr:W
-            m = re.match(r"step:(\d+)/\d+, train_time:([\d.]+)ms,.*lr:([\d.]+)", line)
+            # Train line without train loss: step:N/M, train_time:X(ms| secs), step_avg:Yms, lr:W
+            m = re.match(r"step:(\d+)/\d+, train_time:([\d.]+)\s*(ms|secs?),.*lr:([\d.]+)", line)
             if m:
                 train_steps.append(int(m.group(1)))
-                train_times_s.append(float(m.group(2)) / 1000)
+                t = float(m.group(2))
+                train_times_s.append(t if m.group(3).startswith("sec") else t / 1000)
                 train_losses.append(None)
-                train_lrs.append(float(m.group(3)))
+                train_lrs.append(float(m.group(4)))
 
     # Detect if train_time values are actually seconds mislabeled as ms
     # Real ms values are in the thousands+ (e.g. 385962), mislabeled ones are in the hundreds (e.g. 269.3)
