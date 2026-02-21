@@ -44,7 +44,7 @@ STAGES = [
     Stage(duration=None, lr_mul=0.15, lr_floor=0.15),  # extension
 ]
 EXTENSION_ITERATIONS = 40
-COOLDOWN_FRAC = 0.60
+COOLDOWN_FRAC = 0.65
 
 TOTAL_STEPS = SCHEDULED_ITERATIONS + EXTENSION_ITERATIONS
 ends = [0] + [round(c * SCHEDULED_ITERATIONS) for c in accumulate(s.duration for s in STAGES[:-1])] + [TOTAL_STEPS]
