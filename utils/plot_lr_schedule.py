@@ -39,8 +39,8 @@ SCHEDULED_ITERATIONS, durations = compute_schedule_from_steps(STAGE_STEPS)
 # Mirror the stages from s07_schedule.py
 STAGES = [
     Stage(duration=durations[0], lr_mul=1.0, lr_floor=0.15),
-    Stage(duration=durations[1], lr_mul=1.52, lr_floor=-0.8),
-    Stage(duration=durations[2], lr_mul=1.73, lr_floor=0.15),
+    Stage(duration=durations[1], lr_mul=1.52, lr_floor=-1.5),
+    Stage(duration=durations[2], lr_mul=1.1, lr_floor=0.15),
     Stage(duration=None, lr_mul=0.15, lr_floor=0.15),  # extension
 ]
 EXTENSION_ITERATIONS = 40
@@ -85,11 +85,11 @@ def get_lr(step):
     # Stages 0 and 1: original behavior
     if idx <= 1:
         return get_lr_original(step)
-    # Stage 2 (third stage): linear from original start LR to lr_floor
+    # Stage 2 (third stage): linear from lr_mul to lr_floor (independent of previous stage)
     if idx == 2:
         start, end = boundaries[2]
         t = (step - start) / (end - start)
-        return STAGE3_START_LR * (1 - t) + STAGE3_END_LR * t
+        return stage.lr_mul * (1 - t) + stage.lr_floor * t
     # Extension: linear from lr_mul to lr_floor
     start, end = boundaries[3]
     t = (step - start) / (end - start)
