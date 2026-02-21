@@ -33,17 +33,17 @@ def compute_schedule_from_steps(stage_steps: list[int]) -> tuple[int, list[float
 
 
 # Define stage steps and compute schedule
-STAGE_STEPS = [450, 400, 340]
+STAGE_STEPS = [497, 420, 340]
 SCHEDULED_ITERATIONS, durations = compute_schedule_from_steps(STAGE_STEPS)
 
 # Mirror the stages from s07_schedule.py
 STAGES = [
     Stage(duration=durations[0], lr_mul=1.0, lr_floor=0.15),
     Stage(duration=durations[1], lr_mul=1.52, lr_floor=0.15),
-    Stage(duration=durations[2], lr_mul=1.73, lr_floor=0.30),
-    Stage(duration=None, lr_mul=0.3, lr_floor=0.01),  # extension
+    Stage(duration=durations[2], lr_mul=1.73, lr_floor=0.15),
+    Stage(duration=None, lr_mul=0.15, lr_floor=0.15),  # extension
 ]
-EXTENSION_ITERATIONS = 200
+EXTENSION_ITERATIONS = 40
 COOLDOWN_FRAC = 0.47
 
 TOTAL_STEPS = SCHEDULED_ITERATIONS + EXTENSION_ITERATIONS
