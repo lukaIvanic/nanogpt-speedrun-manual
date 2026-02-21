@@ -17,11 +17,11 @@ STAGES = [
     Stage(duration=1/3, lr_mul=1.0, lr_floor=0.15),
     Stage(duration=1/3, lr_mul=1.52, lr_floor=0.15),
     Stage(duration=1/3, lr_mul=1.73, lr_floor=0.30),
-    Stage(duration=None, lr_mul=1.0, lr_floor=0.15),  # extension
+    Stage(duration=None, lr_mul=0.6, lr_floor=0.12),  # extension
 ]
 
 SCHEDULED_ITERATIONS = 1020
-EXTENSION_ITERATIONS = 510
+EXTENSION_ITERATIONS = 200
 COOLDOWN_FRAC = 0.55
 
 TOTAL_STEPS = SCHEDULED_ITERATIONS + EXTENSION_ITERATIONS
@@ -63,8 +63,10 @@ def get_lr(step):
         start, end = boundaries[2]
         t = (step - start) / (end - start)
         return STAGE3_START_LR * (1 - t) + STAGE3_END_LR * t
-    # Extension: flat at floor
-    return STAGES[3].lr_floor
+    # Extension: linear from lr_mul to lr_floor
+    start, end = boundaries[3]
+    t = (step - start) / (end - start)
+    return STAGES[3].lr_mul * (1 - t) + STAGES[3].lr_floor * t
 
 
 steps = list(range(TOTAL_STEPS + 1))

@@ -21,7 +21,7 @@ class Hyperparameters:
     val_batch_size: int = 4 * 64 * 1024 * 8
     # schedule
     num_scheduled_iterations: int = 1020  # number of steps to complete lr and ws schedule
-    num_extension_iterations: int = 510  # number of steps to continue training at final lr and ws
+    num_extension_iterations: int = 200  # number of steps to continue training at final lr and ws
     # evaluation and logging
     run_id: str = f"{uuid.uuid4()}"
     val_loss_every: int = 50  # every how many steps to evaluate val loss? 0 for only at the end
@@ -105,9 +105,11 @@ class TrainingSchedule:
             t = (step - s3_start) / (s3_end - s3_start)
             return self._stage3_start_lr * (1 - t) + stage.lr_floor * t
 
-        # Extension: flat at floor
-        if step >= s3_end:
-            return self.stages[-1].lr_floor
+        # Extension: linear from lr_mul to lr_floor
+        ext_start, ext_end = self.boundaries[3]
+        if step >= ext_start:
+            t = (step - ext_start) / (ext_end - ext_start)
+            return self.stages[-1].lr_mul * (1 - t) + self.stages[-1].lr_floor * t
 
         # Stages 0 & 1: original cooldown behavior
         lr = stage.lr_mul
@@ -126,7 +128,7 @@ TRAINING_STAGES = [
     TrainingStage(duration=1/3, train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(5, 11), lr_mul=1.73, lr_floor=0.30,  # (24/8)**0.5
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
     # extension stage
-    TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=1.0,  # lr_mul is not used
+    TrainingStage(train_max_seq_len=2048, batch_size=24 * 2048 * 8, window_sizes=(6, 13), lr_mul=0.6, lr_floor=0.12,
                   mtp_weights_start=[1.0], mtp_weights_end=[1.0]),
 ]
 
