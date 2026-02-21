@@ -12,15 +12,37 @@ class Stage:
     lr_mul: float
     lr_floor: float = 0.15
 
+
+def compute_schedule_from_steps(stage_steps: list[int]) -> tuple[int, list[float]]:
+    """
+    Given a list of per-stage iteration counts, compute total and duration fractions.
+
+    Args:
+        stage_steps: List of iteration counts for each stage (excluding extension)
+
+    Returns:
+        (total_scheduled_iterations, list_of_duration_fractions)
+
+    Example:
+        >>> compute_schedule_from_steps([450, 400, 340])
+        (1190, [0.378, 0.336, 0.286])
+    """
+    total = sum(stage_steps)
+    durations = [s / total for s in stage_steps]
+    return total, durations
+
+
+# Define stage steps and compute schedule
+STAGE_STEPS = [450, 400, 340]
+SCHEDULED_ITERATIONS, durations = compute_schedule_from_steps(STAGE_STEPS)
+
 # Mirror the stages from s07_schedule.py
 STAGES = [
-    Stage(duration=1/3, lr_mul=1.0, lr_floor=0.15),
-    Stage(duration=1/3, lr_mul=1.52, lr_floor=0.15),
-    Stage(duration=1/3, lr_mul=1.73, lr_floor=0.30),
+    Stage(duration=durations[0], lr_mul=1.0, lr_floor=0.15),
+    Stage(duration=durations[1], lr_mul=1.52, lr_floor=0.15),
+    Stage(duration=durations[2], lr_mul=1.73, lr_floor=0.30),
     Stage(duration=None, lr_mul=0.3, lr_floor=0.01),  # extension
 ]
-
-SCHEDULED_ITERATIONS = 1020
 EXTENSION_ITERATIONS = 200
 COOLDOWN_FRAC = 0.55
 
@@ -87,3 +109,6 @@ plt.tight_layout()
 out = os.path.join(os.path.dirname(__file__), "lr_schedule.png")
 plt.savefig(out, dpi=150)
 print(f"Saved {out}")
+print(f"\nSchedule config for s07_schedule.py:")
+print(f"  num_scheduled_iterations = {SCHEDULED_ITERATIONS}")
+print(f"  Stage durations: {[round(d, 6) for d in durations]}")
